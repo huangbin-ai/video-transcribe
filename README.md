@@ -107,6 +107,12 @@ python3 Tools/transcribe.py -i "输入源" [选项]
 
 详见 [Workflows/Extract.md](Workflows/Extract.md)
 
+## 底层依赖
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — 视频下载与字幕提取
+- [Gemini API](https://ai.google.dev/) — 语音转文字
+- [ffmpeg](https://ffmpeg.org/) — 音频提取
+
 ## License
 
 MIT
