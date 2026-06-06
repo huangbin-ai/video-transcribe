@@ -65,6 +65,16 @@ def get_api_key():
     return ""
 
 
+# 需要代理才能访问的域名
+PROXY_DOMAINS = {"youtube.com", "youtu.be", "twitter.com", "x.com", "vimeo.com"}
+
+
+def needs_proxy(url):
+    """判断 URL 是否需要代理"""
+    host = (urlparse(url).hostname or "").lower()
+    return any(d in host for d in PROXY_DOMAINS)
+
+
 def normalize_url(url):
     """把各平台非标准 URL 转成 yt-dlp 能识别的格式"""
     parsed = urlparse(url)
@@ -82,7 +92,7 @@ def normalize_url(url):
 
 # ─── 字幕抓取（优先路径，快且免费）────────────────────────────
 
-def try_fetch_subtitles(url, tmpdir, proxy=None):
+def try_fetch_subtitles(url, tmpdir, proxy=None, cookies_browser=None):
     """
     用 yt-dlp 尝试抓取现成字幕（自动字幕 + 官方字幕）
     成功返回字幕文本，失败返回 None
@@ -102,8 +112,11 @@ def try_fetch_subtitles(url, tmpdir, proxy=None):
         url
     ]
     if proxy:
-        cmd.insert(1, f"--proxy")
+        cmd.insert(1, "--proxy")
         cmd.insert(2, proxy)
+    if cookies_browser:
+        cmd.insert(1, "--cookies-from-browser")
+        cmd.insert(2, cookies_browser)
 
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -157,7 +170,7 @@ def parse_subtitle_file(fpath):
 
 # ─── 音频下载 ────────────────────────────────────────────
 
-def download_audio(url, tmpdir, proxy=None):
+def download_audio(url, tmpdir, proxy=None, cookies_browser=None):
     """用 yt-dlp 下载音频为 mp3"""
     print("⬇️  下载音频中...", flush=True)
     audio_path = os.path.join(tmpdir, "audio.mp3")
@@ -172,6 +185,9 @@ def download_audio(url, tmpdir, proxy=None):
     if proxy:
         cmd.insert(1, "--proxy")
         cmd.insert(2, proxy)
+    if cookies_browser:
+        cmd.insert(1, "--cookies-from-browser")
+        cmd.insert(2, cookies_browser)
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
@@ -300,10 +316,14 @@ def main():
                         help="代理地址（如 http://127.0.0.1:1082）")
     parser.add_argument("--no-subtitle", action="store_true",
                         help="跳过字幕抓取，强制音频转录")
+    parser.add_argument("--cookies-from-browser", "-c",
+                        help="从浏览器读取 Cookie（chrome/firefox/safari）")
     args = parser.parse_args()
 
-    # 代理：命令行参数 > 环境变量
-    proxy = args.proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+    # 代理：命令行参数直接用；环境变量只在需要时用（避免国内站走代理反而连不上）
+    proxy_available = args.proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+    # Cookie：命令行参数 > 环境变量
+    cookies_browser = args.cookies_from_browser or os.environ.get("GRABBER_COOKIES_BROWSER") or None
 
     # 输出路径
     if args.output:
@@ -324,13 +344,18 @@ def main():
                 print(f"🔄 URL 已标准化：{url}", flush=True)
             print(f"🌐 视频 URL：{url}", flush=True)
 
+            # 智能代理：命令行指定的强制用；否则只有海外站才走代理
+            proxy = proxy_available if (args.proxy or needs_proxy(url)) else None
+            if proxy:
+                print(f"🌍 使用代理：{proxy}", flush=True)
+
             # Step 1: 尝试抓字幕（快、免费）
             if not args.no_subtitle:
-                text = try_fetch_subtitles(url, tmpdir, proxy=proxy)
+                text = try_fetch_subtitles(url, tmpdir, proxy=proxy, cookies_browser=cookies_browser)
 
             # Step 2: 没有字幕，下载音频转录
             if not text:
-                audio_path = download_audio(url, tmpdir, proxy=proxy)
+                audio_path = download_audio(url, tmpdir, proxy=proxy, cookies_browser=cookies_browser)
                 if args.engine == "gemini":
                     text = transcribe_gemini(audio_path)
                 else:

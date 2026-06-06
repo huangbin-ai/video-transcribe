@@ -107,10 +107,6 @@ python3 Tools/transcribe.py -i "输入源" [选项]
 
 详见 [Workflows/Extract.md](Workflows/Extract.md)
 
-## 致谢
-
-架构参考 [claude-skill-video-transcribe](https://github.com/Jane-xiaoer/claude-skill-video-transcribe)，底层基于 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 和 [Gemini API](https://ai.google.dev/)。
-
 ## License
 
 MIT
